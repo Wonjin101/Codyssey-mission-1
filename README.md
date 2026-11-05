@@ -422,13 +422,7 @@ origin	https://github.com/Wonjin101/Codyssey-mission-1.git (push)
 
 ```
 
-## 11. 보안 및 개인정보 보호 확인
-
-* 기술 문서 내 `git config --list` 출력 로그의 개인 이메일 주소 마스킹(`dns****@gmail.com`) 처리를 완료했습니다.
-
-* 전체 명령어 로그, `Dockerfile`, 스크린샷 내에 GitHub Personal Access Token(PAT), 비밀번호, 개인키(SSH Key), 인증 코드 등 민감한 정보가 포함되지 않았음을 확인했습니다.
-
-## 12. 🔧 트러블슈팅 (Troubleshooting) 기록
+## 11. 🔧 트러블슈팅 (Troubleshooting) 기록
 
 실습을 진행하며 겪은 주요 시행착오와 원인 분석 및 해결 과정입니다.
 
@@ -461,3 +455,44 @@ origin	https://github.com/Wonjin101/Codyssey-mission-1.git (push)
 * **해결 방법**:
 
   * `cd ~/mission1-Codyssey` 및 `pwd` 명령어로 프롬프트 위치를 먼저 확인하는 습관을 들이고, 이미지 빌드 시에는 `--no-cache` 옵션을, 브라우저 확인 시에는 강력 새로고침(`Cmd + Shift + R`)을 수행하여 변경 사항이 즉시 반영되도록 해결했습니다.
+
+ ---
+
+## 12. 심화 이론 및 운영·진단 보완 문서
+
+### 🌐 1) 네트워크 네임스페이스(Network Namespace)와 포트포워딩(Port Forwarding) 이론
+- **네트워크 네임스페이스란?** 각 Docker 컨테이너가 호스트 및 다른 컨테이너와 완전히 분리된 **독립적인 네트워크 스택(고유 IP, 라우팅 테이블, 자체 포트 공간 `0~65535`)**을 갖도록 커널 레벨에서 격리하는 기술입니다. 컨테이너 내부의 NGINX가 `80`번 포트를 열어도 이는 컨테이너 내부 네트워크 안에서만 유효합니다.
+- **포트포워딩 동작 원리**: `docker run -p 8080:80` 옵션은 Docker 네트워크 드라이버가 **호스트의 `8080` 포트로 유입되는 패킷을 가로채어 컨테이너 내부의 `80` 포트로 전달(NAT/DNAT)**해 주는 기능입니다. 이를 통해 외부 사용자는 `http://localhost:8080`을 통해 격리된 컨테이너 내부 웹 서버에 접근할 수 있습니다.
+
+### 🚨 2) 포트 충돌(Port Conflict) 발생 시 진단 및 해결 절차
+이미 사용 중인 호스트 포트로 새 컨테이너를 띄우려고 할 때의 표준 진단 및 해결 절차입니다.
+```bash
+# [진단 1단계] 호스트 OS에서 8080 포트를 점유 중인 프로세스 확인
+wonjin@wonjin-ui-MacBookPro mission1-Codyssey % lsof -i :8080
+
+# [진단 2단계] 8080 포트를 매핑 중인 Docker 컨테이너 특정
+wonjin@wonjin-ui-MacBookPro mission1-Codyssey % docker ps --filter "publish=8080"
+
+# [해결 방법] 기존 포트 점유 컨테이너 중지/삭제 후 재실행 또는 다른 포트 사용
+wonjin@wonjin-ui-MacBookPro mission1-Codyssey % docker stop <컨테이너ID> && docker rm <컨테이너ID>
+wonjin@wonjin-ui-MacBookPro mission1-Codyssey % docker run -d -p 8081:80 ...
+```
+
+### 💾 3) Docker 볼륨(Volume) 백업 및 복구 전략
+호스트 디스크 장애나 실수로 인한 볼륨 삭제에 대비하여 임시 컨테이너(`--rm`)와 바인드 마운트를 결합한 `.tar.gz` 아카이브 백업 전략을 수립했습니다.
+```bash
+# 1) 백업 디렉토리 생성 및 tar.gz 압축 백업 수행
+wonjin@wonjin-ui-MacBookPro mission1-Codyssey % mkdir -p backup
+wonjin@wonjin-ui-MacBookPro mission1-Codyssey % docker run --rm -v my-data-vol:/volume-data:ro -v $(pwd)/backup:/backup ubuntu:latest tar czvf /backup/my-data-vol-backup.tar.gz -C /volume-data .
+
+# 2) 신규 볼륨 생성 및 백업 아카이브 복원 테스트
+wonjin@wonjin-ui-MacBookPro mission1-Codyssey % docker volume create my-data-vol-restored
+wonjin@wonjin-ui-MacBookPro mission1-Codyssey % docker run --rm -v my-data-vol-restored:/restore-target -v $(pwd)/backup:/backup ubuntu:latest tar xzvf /backup/my-data-vol-backup.tar.gz -C /restore-target
+```
+
+---
+
+## 13. 보안 및 개인정보 보호 확인
+
+- 기술 문서 내 `git config --list` 출력 로그 및 스크린샷 내 개인 이메일 주소 마스킹(`dns****@gmail.com`) 처리를 완료했습니다.
+- 전체 명령어 로그 및 문서 내에 GitHub Personal Access Token(PAT), 비밀번호 등 민감한 인증 정보가 포함되지 않았음을 확인했습니다.
